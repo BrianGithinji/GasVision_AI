@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import os
 from pymongo import MongoClient
 import json
+import toml
 
 # ---------------------------
 # CONFIG
@@ -186,9 +187,13 @@ html, body, [class*="css"] {
 # MONGODB CONNECTION WITH FALLBACK
 # ---------------------------
 try:
+    # Load secrets from toml file
+    secrets = toml.load("secrets.toml")
+    mongodb_uri = secrets["MONGODB_URI"]
+    
     @st.cache_resource
     def init_connection():
-        return MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
+        return MongoClient(mongodb_uri, serverSelectionTimeoutMS=2000)
     
     client = init_connection()
     # Test connection
