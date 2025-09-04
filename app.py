@@ -183,22 +183,34 @@ html, body, [class*="css"] {
 """, unsafe_allow_html=True)
 
 # ---------------------------
-# MONGODB CONNECTION
+# MONGODB CONNECTION WITH FALLBACK
 # ---------------------------
-@st.cache_resource
-def init_connection():
-    return MongoClient("mongodb://localhost:27017/")
-
-client = init_connection()
-db = client.gasvision_db
-orders_collection = db.orders
-customers_collection = db.customers
+try:
+    @st.cache_resource
+    def init_connection():
+        return MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
+    
+    client = init_connection()
+    # Test connection
+    client.admin.command('ping')
+    db = client.gasvision_db
+    orders_collection = db.orders
+    customers_collection = db.customers
+    USE_MONGODB = True
+except:
+    USE_MONGODB = False
+    st.warning("MongoDB not available. Using session storage (data will not persist).")
 
 # ---------------------------
 # INITIALIZE SESSION STATE
 # ---------------------------
 if 'page' not in st.session_state:
     st.session_state.page = 'Home'
+if not USE_MONGODB:
+    if 'orders' not in st.session_state:
+        st.session_state.orders = []
+    if 'customers' not in st.session_state:
+        st.session_state.customers = {}
 
 # ---------------------------
 # HEADER WITH LOGOS
@@ -354,26 +366,42 @@ elif st.session_state.page == 'Order':
         
         if submitted:
             if customer_name and phone and location:
-                order_count = orders_collection.count_documents({})
-                order_id = f"GV{order_count+1:04d}"
-                order = {
-                    'id': order_id,
-                    'customer': customer_name,
-                    'phone': phone,
-                    'amount': amount,
-                    'location': location,
-                    'delivery_time': delivery_time,
-                    'date': datetime.now().strftime('%Y-%m-%d %H:%M'),
-                    'status': 'Confirmed'
-                }
-                
-                # Insert into MongoDB
-                orders_collection.insert_one(order)
-                customers_collection.update_one(
-                    {'phone': phone},
-                    {'$set': {'name': customer_name, 'phone': phone}},
-                    upsert=True
-                )
+                if USE_MONGODB:
+                    order_count = orders_collection.count_documents({})
+                    order_id = f"GV{order_count+1:04d}"
+                    order = {
+                        'id': order_id,
+                        'customer': customer_name,
+                        'phone': phone,
+                        'amount': amount,
+                        'location': location,
+                        'delivery_time': delivery_time,
+                        'date': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                        'status': 'Confirmed'
+                    }
+                    
+                    # Insert into MongoDB
+                    orders_collection.insert_one(order)
+                    customers_collection.update_one(
+                        {'phone': phone},
+                        {'$set': {'name': customer_name, 'phone': phone}},
+                        upsert=True
+                    )
+                else:
+                    # Fallback to session state
+                    order_id = f"GV{len(st.session_state.orders)+1:04d}"
+                    order = {
+                        'id': order_id,
+                        'customer': customer_name,
+                        'phone': phone,
+                        'amount': amount,
+                        'location': location,
+                        'delivery_time': delivery_time,
+                        'date': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                        'status': 'Confirmed'
+                    }
+                    st.session_state.orders.append(order)
+                    st.session_state.customers[phone] = customer_name
                 
                 st.success(f"""**Order Confirmed!**
                 
@@ -392,7 +420,11 @@ SMS confirmation sent to {phone}""")
                 st.error("Please fill in all required fields.")
     
     # Recent Orders
-    recent_orders = list(orders_collection.find().sort('_id', -1).limit(3))
+    if USE_MONGODB:
+        recent_orders = list(orders_collection.find().sort('_id', -1).limit(3))
+    else:
+        recent_orders = st.session_state.orders[-3:] if st.session_state.orders else []
+    
     if recent_orders:
         st.markdown("""
         <div class="section">
@@ -421,12 +453,23 @@ elif st.session_state.page == 'History':
     # User identification
     user_phone = st.text_input("Enter your phone number to view history:", placeholder="e.g., +254 801 234 5678")
     
-    customer = customers_collection.find_one({'phone': user_phone})
-    if user_phone and customer:
-        customer_name = customer['name']
-        
-        # Get user orders
-        user_orders = list(orders_collection.find({'phone': user_phone}))
+    if USE_MONGODB:
+        customer = customers_collection.find_one({'phone': user_phone})
+        if user_phone and customer:
+            customer_name = customer['name']
+            user_orders = list(orders_collection.find({'phone': user_phone}))
+        else:
+            customer_name = None
+            user_orders = []
+    else:
+        if user_phone and user_phone in st.session_state.customers:
+            customer_name = st.session_state.customers[user_phone]
+            user_orders = [order for order in st.session_state.orders if order['phone'] == user_phone]
+        else:
+            customer_name = None
+            user_orders = []
+    
+    if user_phone and customer_name:
         
         if user_orders:
             # Calculate total consumption
