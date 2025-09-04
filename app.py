@@ -356,7 +356,7 @@ elif st.session_state.page == 'Order':
         
         with col1:
             customer_name = st.text_input("Customer Name", placeholder="Enter your full name")
-            phone = st.text_input("Phone Number", placeholder="e.g., +254 801 234 5678")
+            phone = st.text_input("Phone Number", placeholder="e.g.,  701 234 5678")
             
         with col2:
             amount = st.slider("Amount of Gas (kg)", 0, 100, 13, help="Standard cylinder is 13kg")
@@ -456,7 +456,7 @@ elif st.session_state.page == 'History':
     """, unsafe_allow_html=True)
     
     # User identification
-    user_phone = st.text_input("Enter your phone number to view history:", placeholder="e.g., +254 801 234 5678")
+    user_phone = st.text_input("Enter your phone number to view history:", placeholder="e.g.,  701 234 5678")
     
     if USE_MONGODB:
         customer = customers_collection.find_one({'phone': user_phone})
@@ -538,7 +538,7 @@ elif st.session_state.page == 'History':
 st.markdown("""
 <div class="footer">
     <p>© 2025 GasVision AI - In collaboration with Green Wells Energies</p>
-    <p>Contact: info@gasvisionai.com | +254 800 GAS VISION</p>
+    <p>Contact: info@gasvisionai.com |  746 435 698</p>
     <p>Powered by AI • Built for smarter gas management</p>
 </div>
 """, unsafe_allow_html=True)
