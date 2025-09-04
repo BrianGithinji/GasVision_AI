@@ -206,7 +206,7 @@ if 'page' not in st.session_state:
 col1, col2, col3 = st.columns([1, 2, 1])
 
 with col1:
-    st.image(r"C:\Users\brian\OneDrive\Desktop\lpg\greenwells logo.png", width=150)
+    st.image(r"greenwells logo.png", width=150)
     
 with col2:
     st.markdown("""
@@ -217,7 +217,7 @@ with col2:
     """, unsafe_allow_html=True)
     
 with col3:
-    st.image(r"C:\Users\brian\OneDrive\Desktop\lpg\gasvision AI logo.png", width=100)
+    st.image(r"gasvision AI logo.png", width=100)
 
 # ---------------------------
 # NAVIGATION
