@@ -6,6 +6,8 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import os
+from pymongo import MongoClient
+import json
 
 # ---------------------------
 # CONFIG
@@ -181,14 +183,22 @@ html, body, [class*="css"] {
 """, unsafe_allow_html=True)
 
 # ---------------------------
+# MONGODB CONNECTION
+# ---------------------------
+@st.cache_resource
+def init_connection():
+    return MongoClient("mongodb://localhost:27017/")
+
+client = init_connection()
+db = client.gasvision_db
+orders_collection = db.orders
+customers_collection = db.customers
+
+# ---------------------------
 # INITIALIZE SESSION STATE
 # ---------------------------
 if 'page' not in st.session_state:
     st.session_state.page = 'Home'
-if 'orders' not in st.session_state:
-    st.session_state.orders = []
-if 'customers' not in st.session_state:
-    st.session_state.customers = {}
 
 # ---------------------------
 # HEADER WITH LOGOS
@@ -344,7 +354,8 @@ elif st.session_state.page == 'Order':
         
         if submitted:
             if customer_name and phone and location:
-                order_id = f"GV{len(st.session_state.orders)+1:04d}"
+                order_count = orders_collection.count_documents({})
+                order_id = f"GV{order_count+1:04d}"
                 order = {
                     'id': order_id,
                     'customer': customer_name,
@@ -355,8 +366,14 @@ elif st.session_state.page == 'Order':
                     'date': datetime.now().strftime('%Y-%m-%d %H:%M'),
                     'status': 'Confirmed'
                 }
-                st.session_state.orders.append(order)
-                st.session_state.customers[phone] = customer_name
+                
+                # Insert into MongoDB
+                orders_collection.insert_one(order)
+                customers_collection.update_one(
+                    {'phone': phone},
+                    {'$set': {'name': customer_name, 'phone': phone}},
+                    upsert=True
+                )
                 
                 st.success(f"""**Order Confirmed!**
                 
@@ -375,14 +392,15 @@ SMS confirmation sent to {phone}""")
                 st.error("Please fill in all required fields.")
     
     # Recent Orders
-    if st.session_state.orders:
+    recent_orders = list(orders_collection.find().sort('_id', -1).limit(3))
+    if recent_orders:
         st.markdown("""
         <div class="section">
             <h3>Recent Orders</h3>
         </div>
         """, unsafe_allow_html=True)
         
-        for order in st.session_state.orders[-3:]:
+        for order in recent_orders:
             st.markdown(f"""
             <div style="background: #f8f9fa; padding: 1rem; border-radius: 10px; margin: 0.5rem 0; border-left: 4px solid #004d40;">
                 <strong>Order {order['id']}</strong> - {order['customer']} - {order['amount']}kg - {order['status']}
@@ -403,11 +421,12 @@ elif st.session_state.page == 'History':
     # User identification
     user_phone = st.text_input("Enter your phone number to view history:", placeholder="e.g., +254 801 234 5678")
     
-    if user_phone and user_phone in st.session_state.customers:
-        customer_name = st.session_state.customers[user_phone]
+    customer = customers_collection.find_one({'phone': user_phone})
+    if user_phone and customer:
+        customer_name = customer['name']
         
         # Get user orders
-        user_orders = [order for order in st.session_state.orders if order['phone'] == user_phone]
+        user_orders = list(orders_collection.find({'phone': user_phone}))
         
         if user_orders:
             # Calculate total consumption
